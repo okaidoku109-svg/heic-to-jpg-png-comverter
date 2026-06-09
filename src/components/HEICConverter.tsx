@@ -42,86 +42,6 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// Generates a high-quality beautiful canvas blob to simulate HEIC conversions
-const getMockCanvasBlob = (filename: string, format: OutputFormat, quality: number): Promise<Blob> => {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1920;
-    canvas.height = 1080;
-    const ctx = canvas.getContext('2d');
-    
-    if (ctx) {
-      if (filename.includes('sunset')) {
-        // Sunset Gradient
-        const grad = ctx.createLinearGradient(0, 0, 0, 1080);
-        grad.addColorStop(0, '#f857a6'); // vibrant pink-red
-        grad.addColorStop(0.5, '#ff5858'); // coral orange
-        grad.addColorStop(1, '#ff8008'); // gold sun orange
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 1920, 1080);
-
-        // Sun
-        ctx.beginPath();
-        ctx.arc(960, 580, 200, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.fill();
-
-        // Reflections
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.fillRect(300, 850, 1320, 20);
-        ctx.fillRect(500, 890, 920, 15);
-        ctx.fillRect(700, 920, 520, 10);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 50px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Demo Sunset iPhone Photo (Converted)', 960, 1000);
-      } else {
-        // Alpine Forest Gradient
-        const grad = ctx.createLinearGradient(0, 0, 1920, 1080);
-        grad.addColorStop(0, '#134e5e'); // dark emerald blue
-        grad.addColorStop(1, '#71b280'); // soft sage green
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 1920, 1080);
-
-        // Forest Shapes (abstract mountains)
-        ctx.beginPath();
-        ctx.moveTo(0, 1080);
-        ctx.lineTo(400, 500);
-        ctx.lineTo(800, 1080);
-        ctx.fillStyle = '#1c6d7a';
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(500, 1080);
-        ctx.lineTo(1000, 400);
-        ctx.lineTo(1500, 1080);
-        ctx.fillStyle = '#268896';
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(1100, 1080);
-        ctx.lineTo(1600, 600);
-        ctx.lineTo(1920, 1080);
-        ctx.fillStyle = '#31a0b0';
-        ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 50px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Demo Forest Alpine Photo (Converted)', 960, 1000);
-      }
-    }
-    
-    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-    const qValue = format === 'jpeg' ? quality : undefined;
-    
-    canvas.toBlob((blob) => {
-      resolve(blob || new Blob());
-    }, mimeType, qValue);
-  });
-};
-
 // Helper to resize an image blob using canvas transformation before HEIC conversion completes
 const resizeBlobIfNeeded = (
   blob: Blob,
@@ -303,35 +223,6 @@ export default function HEICConverter() {
     enqueueFiles(newFiles);
   };
 
-  // Add demo simulated files so the user can test the app without having real HEIC files on hand
-  const addSimulatedFiles = () => {
-    const mockFilesData = [
-      { name: 'sunset_beach_iphone_demo.heic', size: 3450200, isSunset: true },
-      { name: 'forest_mountain_hike_demo.heic', size: 4120900, isSunset: false }
-    ];
-
-    const mockFiles: HEICFile[] = mockFilesData.map(mock => {
-      const emptyBlob = new Blob(["mock-heic-data"], { type: 'image/heic' });
-      // Create a File object
-      const file = new File([emptyBlob], mock.name, { type: 'image/heic' });
-      return {
-        id: 'mock-' + Math.random().toString(36).substring(2, 9),
-        file,
-        name: mock.name,
-        size: mock.size,
-        status: 'pending',
-        progress: 0,
-        convertedUrl: null,
-        convertedBlob: null,
-        convertedSize: null,
-        error: null,
-        format: settings.globalFormat
-      };
-    });
-
-    enqueueFiles(mockFiles);
-  };
-
   // Remove a single file from the queue
   const removeFile = (id: string) => {
     setFiles(prev => {
@@ -378,60 +269,49 @@ export default function HEICConverter() {
     try {
       let convertedBlob: Blob;
 
-      if (id.startsWith('mock-')) {
-        // Simulated conversion to keep it fast, reliable, and produce gorgeous wallpapers to download!
-        // Increment progress bar to simulate realistic conversion
-        for (let p = 30; p < 90; p += 20) {
-          setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: p } : f));
-          await new Promise(resolve => setTimeout(resolve, 150));
+      // Real conversion with heic2any (with automatic high-reliability Server-side fallback!)
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: 30, error: null } : f));
+
+      const outputType = targetFile.format === 'jpeg' ? 'image/jpeg' : 'image/png';
+
+      try {
+        console.log("Attempting local browser conversion for:", targetFile.name);
+        // Execute conversion locally in browser
+        const result = await heic2any({
+          blob: targetFile.file,
+          toType: outputType,
+          quality: targetFile.format === 'jpeg' ? currentSettings.quality : undefined
+        });
+
+        // heic2any might return an array of blobs or a single blob
+        convertedBlob = Array.isArray(result) ? result[0] : result;
+      } catch (localErr: any) {
+        console.warn("Local browser conversion failed (likely Web Worker / iframe Sandbox restriction). Activating high-reliability Full-stack Server API conversion fallback...", localErr);
+
+        setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: 50, error: "サーバー側で安全にデコード中..." } : f));
+
+        // Fallback to Express backend conversion!
+        const formData = new FormData();
+        formData.append('file', targetFile.file);
+        formData.append('format', targetFile.format);
+        formData.append('quality', String(currentSettings.quality));
+
+        const response = await fetch('/api/convert', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `サーバー側でのデコード処理に失敗しました。ファイルが適切か確認してください。(コード: ${response.status})`);
         }
-        
-        convertedBlob = await getMockCanvasBlob(targetFile.name, targetFile.format, currentSettings.quality);
-      } else {
-        // Real conversion with heic2any (with automatic high-reliability Server-side fallback!)
-        setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: 30, error: null } : f));
-        
-        const outputType = targetFile.format === 'jpeg' ? 'image/jpeg' : 'image/png';
-        
-        try {
-          console.log("Attempting local browser conversion for:", targetFile.name);
-          // Execute conversion locally in browser
-          const result = await heic2any({
-            blob: targetFile.file,
-            toType: outputType,
-            quality: targetFile.format === 'jpeg' ? currentSettings.quality : undefined
-          });
 
-          // heic2any might return an array of blobs or a single blob
-          convertedBlob = Array.isArray(result) ? result[0] : result;
-        } catch (localErr: any) {
-          console.warn("Local browser conversion failed (likely Web Worker / iframe Sandbox restriction). Activating high-reliability Full-stack Server API conversion fallback...", localErr);
-          
-          setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: 50, error: "サーバー側で安全にデコード中..." } : f));
-          
-          // Fallback to Express backend conversion!
-          const formData = new FormData();
-          formData.append('file', targetFile.file);
-          formData.append('format', targetFile.format);
-          formData.append('quality', String(currentSettings.quality));
+        convertedBlob = await response.blob();
+      }
 
-          const response = await fetch('/api/convert', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.error || `サーバー側でのデコード処理に失敗しました。ファイルが適切か確認してください。(コード: ${response.status})`);
-          }
-
-          convertedBlob = await response.blob();
-        }
-        
-        // Ensure accurate types or use canvas fallback if something is corrupted
-        if (!convertedBlob || convertedBlob.size === 0) {
-          throw new Error("デコードデータが空です。ファイルが破損している可能性があります。");
-        }
+      // Ensure accurate types or use canvas fallback if something is corrupted
+      if (!convertedBlob || convertedBlob.size === 0) {
+        throw new Error("デコードデータが空です。ファイルが破損している可能性があります。");
       }
 
       setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: 90 } : f));
@@ -819,7 +699,6 @@ export default function HEICConverter() {
           <AnimatePresence mode="popLayout">
             {filteredFiles.map((item) => {
               const ext = item.format === 'jpeg' ? 'jpg' : 'png';
-              const isSimulated = item.id.startsWith('mock-');
               const progressPercentage = Math.round(item.progress);
               
               const isHovered = hoveredFileId === item.id;
@@ -871,13 +750,6 @@ export default function HEICConverter() {
                             <ImageIcon className="w-5 h-5 mb-0.5 text-violet-400" />
                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">HEIC</span>
                           </div>
-                        )}
-
-                        {/* Simulated badge */}
-                        {isSimulated && (
-                          <span className="absolute top-0 left-0 bg-amber-500 text-white text-[8px] font-bold px-1 rounded-br">
-                            DEMO
-                          </span>
                         )}
                       </div>
 
@@ -1209,20 +1081,9 @@ export default function HEICConverter() {
               <h4 className="font-bold text-slate-700 text-base mb-1">
                 変換待ちのファイルはありません
               </h4>
-              <p className="text-slate-400 text-xs max-w-sm mx-auto mb-6">
+              <p className="text-slate-400 text-xs max-w-sm mx-auto">
                 上部の点線エリアに写真をドラッグ＆ドロップして変換を開始してください。
               </p>
-              
-              <button
-                id="demo_empty_action_btn"
-                type="button"
-                disabled={isAtMaxCapacity}
-                onClick={addSimulatedFiles}
-                className="inline-flex items-center space-x-1 bg-violet-50 text-violet-700 hover:bg-violet-100 py-2 px-4 rounded-xl text-xs font-bold border border-violet-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-violet-50"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-violet-600 fill-violet-100" />
-                <span>サンプル写真を追加してテストする</span>
-              </button>
             </motion.div>
           )}
         </div>
