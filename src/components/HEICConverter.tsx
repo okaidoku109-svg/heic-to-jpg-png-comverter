@@ -727,24 +727,6 @@ export default function HEICConverter() {
                 </>
               )}
             </div>
-
-            {/* Simulated Mode Quick Invite */}
-            <div className="mt-5 pt-4 border-t border-slate-100 w-full flex flex-col sm:flex-row justify-center items-center gap-2">
-              <span className="text-xs text-slate-500">HEIC写真がお手元にないですか？</span>
-              <button
-                id="demo_simulate_btn"
-                type="button"
-                disabled={isAtMaxCapacity}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addSimulatedFiles();
-                }}
-                className="inline-flex items-center space-x-1 bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 py-1 px-3 rounded-full text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50"
-              >
-                <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500" />
-                <span>デモ用写真で今すぐ体験</span>
-              </button>
-            </div>
           </div>
         </div>
 

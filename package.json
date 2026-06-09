@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build",
+    "build:local": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
+    "start:local": "npm run build:local && node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
@@ -16,6 +18,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "formidable": "^3.5.4",
     "heic-convert": "^2.1.0",
     "heic2any": "^0.0.4",
     "jszip": "^3.10.1",
@@ -27,6 +30,8 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@types/formidable": "^3.4.6",
+    "@vercel/node": "^5.3.0",
     "@types/express": "^4.17.21",
     "@types/jszip": "^3.4.0",
     "@types/multer": "^2.1.0",
