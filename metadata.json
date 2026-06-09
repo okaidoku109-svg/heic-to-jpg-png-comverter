@@ -1,0 +1,6 @@
+{
+  "name": "HEIC to JPG/PNG Converter",
+  "description": "HEIC形式の写真をブラウザ上で高速かつ安全にJPEGやPNG形式に変換・ダウンロードできるツールです。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
